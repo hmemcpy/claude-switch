@@ -122,8 +122,13 @@ if [[ "$NEEDS_WRAP" == "true" ]] || [[ ! -f "${CLAUDE_DIR}/claude" ]]; then
 
 set -e
 
-SETTINGS_FILE="${HOME}/.claude/settings.json"
-PROFILES_DIR="${HOME}/.claude/profiles"
+GLOBAL_SETTINGS_FILE="${HOME}/.claude/settings.json"
+GLOBAL_PROFILES_DIR="${HOME}/.claude/profiles"
+LOCAL_PROFILES_DIR=".claude/profiles"
+
+SETTINGS_FILE="$GLOBAL_SETTINGS_FILE"
+PROFILES_DIR="$GLOBAL_PROFILES_DIR"
+USE_LOCAL=false
 
 # Find the real claude binary
 SCRIPT_DIR="$(dirname "$0")"
@@ -195,26 +200,61 @@ apply_profile() {
   echo "Switched to profile: $profile"
 }
 
-show_current() {
-  if [[ ! -f "$SETTINGS_FILE" ]]; then
-    echo "Current: claude (no settings file)"
+detect_profile() {
+  local settings_file="$1"
+  if [[ ! -f "$settings_file" ]]; then
+    echo "claude"
     return
   fi
   
-  if jq -e '.env.ANTHROPIC_BASE_URL' "$SETTINGS_FILE" > /dev/null 2>&1; then
+  if jq -e '.env.ANTHROPIC_BASE_URL' "$settings_file" > /dev/null 2>&1; then
     local url
-    url=$(jq -r '.env.ANTHROPIC_BASE_URL' "$SETTINGS_FILE")
+    url=$(jq -r '.env.ANTHROPIC_BASE_URL' "$settings_file")
     if [[ "$url" == *"z.ai"* ]]; then
-      echo "Current: zai"
+      echo "zai"
     else
-      echo "Current: custom ($url)"
+      echo "custom"
     fi
   else
-    echo "Current: claude"
+    echo "claude"
   fi
 }
 
-# Parse arguments
+show_current() {
+  echo "Current: $(detect_profile "$SETTINGS_FILE")"
+}
+
+show_status() {
+  local global_profile=$(detect_profile "$GLOBAL_SETTINGS_FILE")
+  local local_profile="(none)"
+  local local_settings=".claude/settings.local.json"
+  
+  if [[ -f "$local_settings" ]]; then
+    local_profile=$(detect_profile "$local_settings")
+  fi
+  
+  # Active is local if set, otherwise global
+  local active="$global_profile"
+  if [[ "$local_profile" != "(none)" ]]; then
+    active="$local_profile (local)"
+  fi
+  
+  echo "Global profile: $global_profile"
+  echo "Local profile:  $local_profile"
+  echo "Active:         $active"
+}
+
+# Parse arguments - first pass: check for --local
+for arg in "$@"; do
+  if [[ "$arg" == "--local" ]]; then
+    USE_LOCAL=true
+    PROFILES_DIR="$LOCAL_PROFILES_DIR"
+    SETTINGS_FILE=".claude/settings.local.json"
+    break
+  fi
+done
+
+# Parse arguments - second pass: process all args
 PROFILE=""
 PASSTHROUGH_ARGS=()
 
@@ -232,6 +272,13 @@ while [[ $# -gt 0 ]]; do
       show_current
       exit 0
       ;;
+    --status)
+      show_status
+      exit 0
+      ;;
+    --local)
+      shift
+      ;;
     *)
       PASSTHROUGH_ARGS+=("$1")
       shift
@@ -241,26 +288,51 @@ done
 
 # Apply profile if specified
 if [[ -n "$PROFILE" ]]; then
+  if [[ "$USE_LOCAL" == "true" ]]; then
+    # Copy profile from global to local if it doesn't exist locally
+    mkdir -p "$LOCAL_PROFILES_DIR"
+    if [[ ! -f "${LOCAL_PROFILES_DIR}/${PROFILE}.json" ]] && [[ -f "${GLOBAL_PROFILES_DIR}/${PROFILE}.json" ]]; then
+      cp "${GLOBAL_PROFILES_DIR}/${PROFILE}.json" "${LOCAL_PROFILES_DIR}/${PROFILE}.json"
+      echo "Copied profile '$PROFILE' to local .claude/profiles/"
+    fi
+  fi
   apply_profile "$PROFILE"
 fi
 
 # If there are passthrough args or no profile was specified, run claude
 if [[ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]] || [[ -z "$PROFILE" ]]; then
-  # Show current profile and set terminal title
-  current=$(show_current 2>/dev/null | sed 's/Current: //')
+  # Detect active profile (local takes precedence)
+  local_settings=".claude/settings.local.json"
+  if [[ -f "$local_settings" ]]; then
+    current=$(detect_profile "$local_settings")
+    current="$current (local)"
+  else
+    current=$(detect_profile "$GLOBAL_SETTINGS_FILE")
+  fi
   echo -e "\033[90m⚡ Profile: ${current}\033[0m"
   printf '\033]0;claude [%s]\007' "$current"
   
   # If using non-native profile, set env vars directly
-  if [[ "$current" != "claude" ]]; then
+  current_base="${current% (local)}"
+  if [[ "$current_base" != "claude" ]]; then
     unset ANTHROPIC_AUTH_TOKEN
     
-    # Read env vars from profile and export them
-    profile_file="${PROFILES_DIR}/${current}.json"
-    if [[ -f "$profile_file" ]] && jq -e '.env' "$profile_file" > /dev/null 2>&1; then
-      while IFS='=' read -r key value; do
-        export "$key"="$value"
-      done < <(jq -r '.env | to_entries | .[] | "\(.key)=\(.value)"' "$profile_file")
+    # Determine which profile file to use
+    if [[ -f "$local_settings" ]]; then
+      # Export env vars from local settings file directly
+      if jq -e '.env' "$local_settings" > /dev/null 2>&1; then
+        while IFS='=' read -r key value; do
+          export "$key"="$value"
+        done < <(jq -r '.env | to_entries | .[] | "\(.key)=\(.value)"' "$local_settings")
+      fi
+    else
+      # Fall back to profile file
+      profile_file="${PROFILES_DIR}/${current_base}.json"
+      if [[ -f "$profile_file" ]] && jq -e '.env' "$profile_file" > /dev/null 2>&1; then
+        while IFS='=' read -r key value; do
+          export "$key"="$value"
+        done < <(jq -r '.env | to_entries | .[] | "\(.key)=\(.value)"' "$profile_file")
+      fi
     fi
   fi
   

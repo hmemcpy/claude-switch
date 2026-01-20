@@ -44,6 +44,10 @@ claude --profile zai       # Switch to z.ai GLM-4.7
 claude --profile claude    # Switch to native Claude
 claude --list-profiles     # List available profiles
 claude --current-profile   # Show active profile
+claude --status            # Show global, local, and active profiles
+
+# Local (project-specific) profiles
+claude --profile zai --local  # Copy profile to ./.claude/profiles/ for this project
 ```
 
 ### Inside Claude
