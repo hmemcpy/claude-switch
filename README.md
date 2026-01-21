@@ -8,6 +8,7 @@ A utility to quickly switch Claude Code between native Anthropic and [z.ai](http
 - Switch from within Claude: `/profile zai`
 - Profile indicator in terminal title and startup banner
 - Preserves all other settings (MCP servers, permissions, etc.)
+- **Survives Claude updates** - no repair needed!
 
 ## Requirements
 
@@ -17,23 +18,20 @@ A utility to quickly switch Claude Code between native Anthropic and [z.ai](http
 
 ## Installation
 
-```bash
-# macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/hmemcpy/claude-switch/main/setup-claude-profiles.sh | bash
-```
-
-Or clone and run:
+### Fresh Install
 
 ```bash
-git clone https://github.com/hmemcpy/claude-switch.git
-cd claude-switch
-./setup-claude-profiles.sh
+git clone https://github.com/hmemcpy/claude-switch.git ~/git/switch
+cd ~/git/switch
+./install.sh
 ```
 
 The script will:
-1. Wrap the Claude binary to add profile switching
-2. Ask for your z.ai API key
-3. Create profile configurations
+1. Create profile configurations in `~/.claude/profiles/`
+2. Add a source line to your `~/.zshrc` or `~/.bashrc`
+3. Ask for your z.ai API key
+
+Then open a new terminal or run `source ~/.zshrc` to activate.
 
 ## Usage
 
@@ -47,7 +45,7 @@ claude --current-profile   # Show active profile
 claude --status            # Show global, local, and active profiles
 
 # Local (project-specific) profiles
-claude --profile zai --local  # Copy profile to ./.claude/profiles/ for this project
+claude --profile zai --local  # Set profile for this project only
 ```
 
 ### Inside Claude
@@ -59,24 +57,23 @@ claude --profile zai --local  # Copy profile to ./.claude/profiles/ for this pro
 
 After switching inside Claude, run `claude -c` to restart and continue the conversation.
 
-## After Claude Updates
-
-If Claude updates itself, the wrapper may be overwritten. Run:
-
-```bash
-./setup-claude-profiles.sh --repair
-```
-
-This re-wraps the binary without changing your profiles or API key.
-
 ## How It Works
 
-The script creates a wrapper around the Claude binary that:
-1. Intercepts `--profile` flag to modify `~/.claude/settings.json`
-2. Displays the current profile on startup
-3. Sets terminal title to show active profile
+The switcher uses a shell function that wraps the `claude` command:
 
-Profiles are stored in `~/.claude/profiles/` as JSON files with `env` (variables to set) and `remove` (variables to remove) sections.
+1. Sources `claude.sh` from your shell rc file
+2. The `claude` function intercepts profile-related flags
+3. Modifies `~/.claude/settings.json` (or `.claude/settings.local.json` for local)
+4. Passes remaining arguments to the real `claude` binary
+
+Because it's a shell function (not a wrapper script), Claude updates don't affect it.
+
+## Profile Storage
+
+- **Global profiles**: `~/.claude/profiles/*.json`
+- **Local profiles**: `.claude/profiles/*.json` (project directory)
+- **Global settings**: `~/.claude/settings.json`
+- **Local settings**: `.claude/settings.local.json` (project directory)
 
 ## Adding Custom Profiles
 
@@ -93,6 +90,37 @@ Create a new JSON file in `~/.claude/profiles/`:
   ]
 }
 ```
+
+## Troubleshooting
+
+### Shell function not working
+
+Make sure your rc file sources claude.sh:
+
+```bash
+# Check if sourced
+grep "claude.sh" ~/.zshrc
+
+# If not, add it
+echo 'source ~/git/switch/scripts/claude.sh' >> ~/.zshrc
+source ~/.zshrc
+```
+
+### Profile not applying
+
+Check that jq is installed:
+
+```bash
+command -v jq || brew install jq
+```
+
+### Claude binary not found
+
+The function looks for claude in these locations:
+1. `command -v claude` result
+2. `~/.local/bin/claude`
+3. `~/.local/bin/claude-bin` (legacy)
+4. `/usr/local/bin/claude`
 
 ## License
 
