@@ -38,15 +38,14 @@ Then open a new terminal or run `source ~/.zshrc` to activate.
 ### Command Line
 
 ```bash
-claude --profile zai       # Switch to z.ai GLM-4.7
-claude --profile claude    # Switch to native Claude
+claude --profile zai       # Switch to z.ai GLM-4.7 (creates .claude/settings.local.json)
+claude --profile claude    # Switch to native Claude (creates .claude/settings.local.json)
 claude --list-profiles     # List available profiles
 claude --current-profile   # Show active profile
 claude --status            # Show global, local, and active profiles
-
-# Local (project-specific) profiles
-claude --profile zai --local  # Set profile for this project only
 ```
+
+Profile switching is always per-project - it creates `.claude/settings.local.json` in the current directory. This way your global settings stay clean and each project can have its own profile.
 
 ### Inside Claude
 
@@ -70,10 +69,9 @@ Because it's a shell function (not a wrapper script), Claude updates don't affec
 
 ## Profile Storage
 
-- **Global profiles**: `~/.claude/profiles/*.json`
-- **Local profiles**: `.claude/profiles/*.json` (project directory)
-- **Global settings**: `~/.claude/settings.json`
-- **Local settings**: `.claude/settings.local.json` (project directory)
+- **Profile definitions**: `~/.claude/profiles/*.json`
+- **Local settings**: `.claude/settings.local.json` (per-project, created by `--profile`)
+- **Profile marker**: `.claude/profile` (stores current profile name)
 
 ## Adding Custom Profiles
 

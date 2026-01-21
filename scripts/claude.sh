@@ -49,21 +49,7 @@ __claude_get_local_profile() {
 
 __claude_apply_profile() {
   local profile="$1"
-  local use_local="$2"
-  local profiles_dir settings_file profile_file
-  
-  if [[ "$use_local" == "true" ]]; then
-    # Create the profile marker file
-    mkdir -p ".claude"
-    echo "$profile" > ".claude/profile"
-    echo "Set local profile to: $profile"
-    return 0
-  else
-    profiles_dir="$HOME/.claude/profiles"
-    settings_file="$HOME/.claude/settings.json"
-  fi
-  
-  profile_file="${profiles_dir}/${profile}.json"
+  local profile_file="$HOME/.claude/profiles/${profile}.json"
   
   if [[ ! -f "$profile_file" ]]; then
     echo "Error: Profile '$profile' not found at $profile_file" >&2
@@ -71,31 +57,32 @@ __claude_apply_profile() {
     return 1
   fi
   
-  # Ensure settings file exists
-  if [[ ! -f "$settings_file" ]]; then
-    mkdir -p "$(dirname "$settings_file")"
-    echo '{}' > "$settings_file"
+  # Always work locally - create .claude/settings.local.json
+  mkdir -p ".claude"
+  echo "$profile" > ".claude/profile"
+  
+  local local_settings=".claude/settings.local.json"
+  if [[ ! -f "$local_settings" ]]; then
+    echo '{}' > "$local_settings"
   fi
   
-  # Step 1: Remove keys if specified
-  if jq -e '.remove' "$profile_file" > /dev/null 2>&1; then
-    local keys_to_remove
-    keys_to_remove=$(jq -c '.remove' "$profile_file")
-    
-    # Remove the keys from env
-    jq --argjson remove "$keys_to_remove" '.env = ((.env // {}) | with_entries(select(.key as $k | $remove | index($k) | not)))' "$settings_file" > "${settings_file}.tmp"
-    mv "${settings_file}.tmp" "$settings_file"
-  fi
-  
-  # Step 2: Add/merge env vars if specified
-  if jq -e '.env' "$profile_file" > /dev/null 2>&1; then
+  # For native claude profile (only has "remove", no "env"), override with empty strings
+  if jq -e '.remove' "$profile_file" > /dev/null 2>&1 && ! jq -e '.env' "$profile_file" > /dev/null 2>&1; then
+    # Native profile: set all keys to empty string to override any global settings
+    local empty_env='{}'
+    for key in $(jq -r '.remove[]' "$profile_file"); do
+      empty_env=$(echo "$empty_env" | jq --arg k "$key" '. + {($k): ""}')
+    done
+    jq --argjson eenv "$empty_env" '.env = $eenv' "$local_settings" > "${local_settings}.tmp"
+    mv "${local_settings}.tmp" "$local_settings"
+  elif jq -e '.env' "$profile_file" > /dev/null 2>&1; then
+    # Non-native profile: apply env vars from profile
     local profile_env
     profile_env=$(jq '.env // {}' "$profile_file")
+    jq --argjson penv "$profile_env" '.env = $penv' "$local_settings" > "${local_settings}.tmp"
+    mv "${local_settings}.tmp" "$local_settings"
     
-    jq --argjson penv "$profile_env" '.env = ((.env // {}) * $penv)' "$settings_file" > "${settings_file}.tmp"
-    mv "${settings_file}.tmp" "$settings_file"
-    
-    # For non-claude profiles, ensure onboarding is complete
+    # Ensure onboarding is complete for non-native profiles
     local claude_json="${HOME}/.claude.json"
     if [[ -f "$claude_json" ]]; then
       jq '. + {hasCompletedOnboarding: true}' "$claude_json" > "${claude_json}.tmp"
@@ -105,7 +92,7 @@ __claude_apply_profile() {
     fi
   fi
   
-  echo "Switched to profile: $profile"
+  echo "Set profile: $profile (in .claude/settings.local.json)"
 }
 
 __claude_show_status() {
@@ -150,18 +137,9 @@ claude() {
   fi
   
   local profile=""
-  local use_local=false
   local passthrough_args=()
   
-  # First pass: check for --local
-  for arg in "$@"; do
-    if [[ "$arg" == "--local" ]]; then
-      use_local=true
-      break
-    fi
-  done
-  
-  # Second pass: parse all arguments
+  # Parse arguments
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --profile)
@@ -180,9 +158,6 @@ claude() {
         __claude_show_status
         return 0
         ;;
-      --local)
-        shift
-        ;;
       --update)
         echo "Updating Claude..."
         command "$CLAUDE_BIN" update
@@ -195,9 +170,9 @@ claude() {
     esac
   done
   
-  # Apply profile if specified
+  # Apply profile if specified (always local)
   if [[ -n "$profile" ]]; then
-    __claude_apply_profile "$profile" "$use_local" || return 1
+    __claude_apply_profile "$profile" || return 1
   fi
   
   # If only switching profile (no other args), we're done
