@@ -122,6 +122,8 @@ __claude_get_bin() {
   elif [[ -x "$HOME/.local/bin/claude-bin" ]]; then
     # Old wrapper approach - use the real binary
     echo "$HOME/.local/bin/claude-bin"
+  elif [[ -x "/opt/homebrew/bin/claude" ]]; then
+    echo "/opt/homebrew/bin/claude"
   elif [[ -x "/usr/local/bin/claude" ]]; then
     echo "/usr/local/bin/claude"
   fi
