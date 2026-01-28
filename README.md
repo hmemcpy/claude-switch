@@ -1,11 +1,12 @@
 # Claude Profile Switcher
 
-A utility to quickly switch Claude Code between native Anthropic and [z.ai](https://z.ai) (GLM-4.7) backends.
+A utility to quickly switch Claude Code between different API backends (native Anthropic, z.ai, OpenAI-compatible endpoints, etc.).
 
 ## Features
 
-- Switch profiles via command line: `claude --profile zai`
-- Switch from within Claude: `/profile zai`
+- Switch profiles via command line: `claude --profile myprofile`
+- Switch from within Claude: `/profile myprofile`
+- Create custom profiles interactively: `./install.sh --new`
 - Profile indicator in terminal title and startup banner
 - Preserves all other settings (MCP servers, permissions, etc.)
 - **Survives Claude updates** - no repair needed!
@@ -14,11 +15,8 @@ A utility to quickly switch Claude Code between native Anthropic and [z.ai](http
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
 - [jq](https://jqlang.github.io/jq/) for JSON manipulation
-- A [z.ai API key](https://z.ai/manage-apikey/apikey-list) (for z.ai profile)
 
 ## Installation
-
-### Fresh Install
 
 ```bash
 git clone https://github.com/hmemcpy/claude-switch.git ~/git/switch
@@ -27,19 +25,32 @@ cd ~/git/switch
 ```
 
 The script will:
-1. Create profile configurations in `~/.claude/profiles/`
+1. Create the native `claude` profile in `~/.claude/profiles/`
 2. Add a source line to your `~/.zshrc` or `~/.bashrc`
-3. Ask for your z.ai API key
 
 Then open a new terminal or run `source ~/.zshrc` to activate.
+
+## Creating Custom Profiles
+
+Use the interactive profile creator:
+
+```bash
+./install.sh --new
+```
+
+This will prompt for:
+- **Profile name** (e.g., `zai`, `openai`, `local`)
+- **API Base URL** (e.g., `https://api.z.ai/api/anthropic`)
+- **API Key**
+- **Model name** (used for opus/sonnet/haiku defaults)
 
 ## Usage
 
 ### Command Line
 
 ```bash
-claude --profile zai       # Switch to z.ai GLM-4.7 (creates .claude/settings.local.json)
-claude --profile claude    # Switch to native Claude (creates .claude/settings.local.json)
+claude --profile zai       # Switch to zai profile (creates .claude/settings.local.json)
+claude --profile claude    # Switch to native Claude
 claude --list-profiles     # List available profiles
 claude --current-profile   # Show active profile
 claude --status            # Show global, local, and active profiles
@@ -50,7 +61,7 @@ Profile switching is always per-project - it creates `.claude/settings.local.jso
 ### Inside Claude
 
 ```
-/profile zai      # Switch to z.ai (restart required)
+/profile zai      # Switch to zai (restart required)
 /profile claude   # Switch to native (restart required)
 ```
 
@@ -62,7 +73,7 @@ The switcher uses a shell function that wraps the `claude` command:
 
 1. Sources `claude.sh` from your shell rc file
 2. The `claude` function intercepts profile-related flags
-3. Modifies `~/.claude/settings.json` (or `.claude/settings.local.json` for local)
+3. Creates `.claude/settings.local.json` with profile settings
 4. Passes remaining arguments to the real `claude` binary
 
 Because it's a shell function (not a wrapper script), Claude updates don't affect it.
@@ -73,15 +84,20 @@ Because it's a shell function (not a wrapper script), Claude updates don't affec
 - **Local settings**: `.claude/settings.local.json` (per-project, created by `--profile`)
 - **Profile marker**: `.claude/profile` (stores current profile name)
 
-## Adding Custom Profiles
+## Manual Profile Creation
 
-Create a new JSON file in `~/.claude/profiles/`:
+You can also create profiles manually in `~/.claude/profiles/`:
 
 ```json
 {
   "env": {
     "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
-    "ANTHROPIC_AUTH_TOKEN": "your-api-key"
+    "ANTHROPIC_AUTH_TOKEN": "your-api-key",
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "your-model",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "your-model",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "your-model"
   },
   "remove": [
     "ANTHROPIC_API_KEY"
@@ -115,10 +131,9 @@ command -v jq || brew install jq
 ### Claude binary not found
 
 The function looks for claude in these locations:
-1. `command -v claude` result
-2. `~/.local/bin/claude`
-3. `~/.local/bin/claude-bin` (legacy)
-4. `/usr/local/bin/claude`
+1. `~/.local/bin/claude`
+2. `~/.local/bin/claude-bin` (legacy)
+3. `/usr/local/bin/claude`
 
 ## License
 

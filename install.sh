@@ -1,36 +1,30 @@
 #!/bin/bash
 # Claude Profile Switcher Setup
-# Run this script to set up profile switching between native Claude and z.ai
+# Run this script to set up profile switching for Claude Code
 #
 # Usage:
-#   ./install.sh              # Setup (skips existing profiles)
-#   ./install.sh --reinstall  # Overwrite existing profiles
+#   ./install.sh        # Initial setup (creates native claude profile)
+#   ./install.sh --new  # Create a new custom profile interactively
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Parse arguments
-REINSTALL=false
+NEW_PROFILE=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --reinstall)
-      REINSTALL=true
+    --new)
+      NEW_PROFILE=true
       shift
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--reinstall]"
+      echo "Usage: $0 [--new]"
       exit 1
       ;;
   esac
 done
-
-echo "╔═══════════════════════════════════════════╗"
-echo "║   Claude Profile Switcher Setup           ║"
-echo "╚═══════════════════════════════════════════╝"
-$REINSTALL && echo "  (reinstall mode - will overwrite profiles)"
-echo
 
 # Check for jq
 if ! command -v jq &> /dev/null; then
@@ -38,6 +32,86 @@ if ! command -v jq &> /dev/null; then
   echo "   Install with: brew install jq"
   exit 1
 fi
+
+# Handle --new: create a custom profile interactively
+if $NEW_PROFILE; then
+  echo "╔═══════════════════════════════════════════╗"
+  echo "║   Create New Claude Profile               ║"
+  echo "╚═══════════════════════════════════════════╝"
+  echo
+  
+  # Get profile details
+  read -p "Profile name (e.g., zai, openai, local): " PROFILE_NAME
+  if [[ -z "$PROFILE_NAME" ]]; then
+    echo "❌ Profile name is required"
+    exit 1
+  fi
+  
+  # Sanitize profile name
+  PROFILE_NAME=$(echo "$PROFILE_NAME" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]-_')
+  
+  if [[ "$PROFILE_NAME" == "claude" ]]; then
+    echo "❌ 'claude' is reserved for native Claude profile"
+    exit 1
+  fi
+  
+  PROFILE_FILE="$HOME/.claude/profiles/${PROFILE_NAME}.json"
+  if [[ -f "$PROFILE_FILE" ]]; then
+    read -p "Profile '$PROFILE_NAME' exists. Overwrite? [y/N]: " OVERWRITE
+    if [[ "$OVERWRITE" != "y" && "$OVERWRITE" != "Y" ]]; then
+      echo "Cancelled."
+      exit 0
+    fi
+  fi
+  
+  read -p "API Base URL (e.g., https://api.z.ai/api/anthropic): " API_URL
+  if [[ -z "$API_URL" ]]; then
+    echo "❌ API URL is required"
+    exit 1
+  fi
+  
+  read -p "API Key: " API_KEY
+  if [[ -z "$API_KEY" ]]; then
+    echo "❌ API Key is required"
+    exit 1
+  fi
+  
+  read -p "Model name (used for opus/sonnet/haiku, e.g., glm-4.7): " MODEL_NAME
+  if [[ -z "$MODEL_NAME" ]]; then
+    echo "❌ Model name is required"
+    exit 1
+  fi
+  
+  # Create the profile
+  mkdir -p ~/.claude/profiles
+  cat > "$PROFILE_FILE" << EOF
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "${API_URL}",
+    "ANTHROPIC_AUTH_TOKEN": "${API_KEY}",
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "${MODEL_NAME}",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "${MODEL_NAME}",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${MODEL_NAME}"
+  },
+  "remove": [
+    "ANTHROPIC_API_KEY"
+  ]
+}
+EOF
+  
+  echo
+  echo "✓ Created profile: $PROFILE_NAME"
+  echo "  Use with: claude --profile $PROFILE_NAME"
+  exit 0
+fi
+
+# Regular install
+echo "╔═══════════════════════════════════════════╗"
+echo "║   Claude Profile Switcher Setup           ║"
+echo "╚═══════════════════════════════════════════╝"
+echo
 
 # Check for claude
 if ! command -v claude &> /dev/null; then
@@ -56,35 +130,8 @@ mkdir -p ~/.claude/profiles
 mkdir -p ~/.claude/commands
 echo "✓ Created directories"
 
-# Check which profiles need to be created
-NEED_CLAUDE=false
-NEED_ZAI=false
-NEED_CEREBRAS=false
-
-if $REINSTALL; then
-  NEED_CLAUDE=true
-  NEED_ZAI=true
-  NEED_CEREBRAS=true
-else
-  [[ ! -f ~/.claude/profiles/claude.json ]] && NEED_CLAUDE=true
-  [[ ! -f ~/.claude/profiles/zai.json ]] && NEED_ZAI=true
-  [[ ! -f ~/.claude/profiles/cerebras.json ]] && NEED_CEREBRAS=true
-fi
-
-# Get API keys if needed
-ZAI_API_KEY=""
-CEREBRAS_API_KEY=""
-if $NEED_ZAI; then
-  echo
-  read -p "Enter your z.ai API key (or press Enter to skip): " ZAI_API_KEY
-fi
-if $NEED_CEREBRAS; then
-  echo
-  read -p "Enter your Cerebras API key (or press Enter to skip): " CEREBRAS_API_KEY
-fi
-
-# Create native profile
-if $NEED_CLAUDE; then
+# Create native claude profile (always, as it's the base)
+if [[ ! -f ~/.claude/profiles/claude.json ]]; then
   cat > ~/.claude/profiles/claude.json << 'EOF'
 {
   "remove": [
@@ -101,70 +148,16 @@ if $NEED_CLAUDE; then
 EOF
   echo "✓ Created claude profile"
 else
-  echo "✓ claude profile exists (use --reinstall to overwrite)"
+  echo "✓ claude profile exists"
 fi
 
-# Create z.ai profile
-if $NEED_ZAI; then
-  if [[ -n "$ZAI_API_KEY" ]]; then
-    cat > ~/.claude/profiles/zai.json << EOF
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
-    "ANTHROPIC_AUTH_TOKEN": "${ZAI_API_KEY}",
-    "API_TIMEOUT_MS": "3000000",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-4.7",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.5-air"
-  },
-  "remove": [
-    "ANTHROPIC_API_KEY"
-  ]
-}
-EOF
-    echo "✓ Created zai profile"
-  else
-    echo "⚠ Skipped zai profile (no API key provided)"
-  fi
-else
-  echo "✓ zai profile exists (use --reinstall to overwrite)"
-fi
-
-# Create cerebras profile
-if $NEED_CEREBRAS; then
-  if [[ -n "$CEREBRAS_API_KEY" ]]; then
-    cat > ~/.claude/profiles/cerebras.json << EOF
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8080",
-    "ANTHROPIC_AUTH_TOKEN": "${CEREBRAS_API_KEY}",
-    "API_TIMEOUT_MS": "3000000",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "zai-glm-4.7",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "zai-glm-4.7",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "zai-glm-4.7"
-  },
-  "remove": [
-    "ANTHROPIC_API_KEY"
-  ]
-}
-EOF
-    echo "✓ Created cerebras profile"
-  else
-    echo "⚠ Skipped cerebras profile (no API key provided)"
-  fi
-else
-  echo "✓ cerebras profile exists (use --reinstall to overwrite)"
-fi
-
-# Create slash command (always update this one as it's not user-customizable)
+# Create slash command
 cat > ~/.claude/commands/profile.md << 'EOF'
-Switch Claude profile between native and z.ai settings.
+Switch Claude profile.
 
 Usage: /profile <profile>
 
-Available profiles: claude, zai, cerebras
+Run `claude --list-profiles` to see available profiles.
 
 1. Run this command to switch the profile:
 
@@ -174,7 +167,7 @@ Available profiles: claude, zai, cerebras
 
 2. After switching, tell the user: "Profile switched. Restart required. Run: `claude -c` to continue this conversation with the new profile."
 EOF
-echo "✓ Updated /profile command"
+echo "✓ Created /profile command"
 
 # Detect shell and rc file
 SHELL_NAME=$(basename "$SHELL")
@@ -214,13 +207,11 @@ echo "  1. Open a new terminal, or"
 echo "  2. Run: source ${RC_FILE:-your shell rc file}"
 echo
 echo "Usage:"
-echo "  claude --profile zai      # Switch to z.ai"
-echo "  claude --profile cerebras # Switch to cerebras (local proxy)"
-echo "  claude --profile claude   # Switch to native"
-echo "  claude --list-profiles    # List profiles"
+echo "  claude --profile <name>   # Switch to a profile"
+echo "  claude --profile claude   # Switch to native Claude"
+echo "  claude --list-profiles    # List available profiles"
 echo "  claude --status           # Show profile status"
-echo "  /profile zai              # Switch from within Claude"
 echo
-echo "To reinstall/update profiles: ./install.sh --reinstall"
+echo "To create a new profile: ./install.sh --new"
 echo
 echo "Shell function approach - survives Claude updates!"

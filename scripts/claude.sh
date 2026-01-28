@@ -27,16 +27,9 @@ __claude_detect_profile() {
     return
   fi
   
+  # Check if there are any env vars set (indicates non-native profile)
   if jq -e '.env.ANTHROPIC_BASE_URL' "$settings_file" > /dev/null 2>&1; then
-    local url
-    url=$(jq -r '.env.ANTHROPIC_BASE_URL' "$settings_file")
-    if [[ "$url" == *"z.ai"* ]]; then
-      echo "zai"
-    elif [[ "$url" == *"127.0.0.1:8080"* ]]; then
-      echo "cerebras"
-    else
-      echo "custom"
-    fi
+    echo "custom"
   else
     echo "claude"
   fi
