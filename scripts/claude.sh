@@ -20,6 +20,78 @@ __claude_list_profiles() {
   done
 }
 
+__claude_create_profile() {
+  echo "╔═══════════════════════════════════════════╗"
+  echo "║   Create New Claude Profile               ║"
+  echo "╚═══════════════════════════════════════════╝"
+  echo
+  
+  # Get profile details
+  read -p "Profile name (e.g., zai, openai, local): " PROFILE_NAME
+  if [[ -z "$PROFILE_NAME" ]]; then
+    echo "❌ Profile name is required"
+    return 1
+  fi
+  
+  # Sanitize profile name
+  PROFILE_NAME=$(echo "$PROFILE_NAME" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]-_')
+  
+  if [[ "$PROFILE_NAME" == "claude" ]]; then
+    echo "❌ 'claude' is reserved for native Claude profile"
+    return 1
+  fi
+  
+  local profile_file="$HOME/.claude/profiles/${PROFILE_NAME}.json"
+  if [[ -f "$profile_file" ]]; then
+    read -p "Profile '$PROFILE_NAME' exists. Overwrite? [y/N]: " OVERWRITE
+    if [[ "$OVERWRITE" != "y" && "$OVERWRITE" != "Y" ]]; then
+      echo "Cancelled."
+      return 0
+    fi
+  fi
+  
+  read -p "API Base URL (e.g., https://api.z.ai/api/anthropic): " API_URL
+  if [[ -z "$API_URL" ]]; then
+    echo "❌ API URL is required"
+    return 1
+  fi
+  
+  read -p "API Key: " API_KEY
+  if [[ -z "$API_KEY" ]]; then
+    echo "❌ API Key is required"
+    return 1
+  fi
+  
+  read -p "Model name (used for opus/sonnet/haiku, e.g., glm-4.7): " MODEL_NAME
+  if [[ -z "$MODEL_NAME" ]]; then
+    echo "❌ Model name is required"
+    return 1
+  fi
+  
+  # Create the profile
+  mkdir -p ~/.claude/profiles
+  cat > "$profile_file" << EOF
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "${API_URL}",
+    "ANTHROPIC_AUTH_TOKEN": "${API_KEY}",
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "${MODEL_NAME}",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "${MODEL_NAME}",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${MODEL_NAME}"
+  },
+  "remove": [
+    "ANTHROPIC_API_KEY"
+  ]
+}
+EOF
+  
+  echo
+  echo "✓ Created profile: $PROFILE_NAME"
+  echo "  Use with: claude --profile $PROFILE_NAME"
+}
+
 __claude_detect_profile() {
   local settings_file="${1:-$HOME/.claude/settings.json}"
   if [[ ! -f "$settings_file" ]]; then
@@ -148,6 +220,10 @@ claude() {
       --list-profiles)
         __claude_list_profiles
         return 0
+        ;;
+      --new-profile)
+        __claude_create_profile
+        return $?
         ;;
       --current-profile)
         echo "Current: $(__claude_detect_profile)"

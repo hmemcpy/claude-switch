@@ -30,31 +30,26 @@ The script will:
 
 Then open a new terminal or run `source ~/.zshrc` to activate.
 
-## Creating Custom Profiles
-
-Use the interactive profile creator:
-
-```bash
-./install.sh --new
-```
-
-This will prompt for:
-- **Profile name** (e.g., `zai`, `openai`, `local`)
-- **API Base URL** (e.g., `https://api.z.ai/api/anthropic`)
-- **API Key**
-- **Model name** (used for opus/sonnet/haiku defaults)
-
 ## Usage
 
 ### Command Line
 
 ```bash
+claude --new-profile       # Create a new custom profile interactively
 claude --profile zai       # Switch to zai profile (creates .claude/settings.local.json)
 claude --profile claude    # Switch to native Claude
 claude --list-profiles     # List available profiles
 claude --current-profile   # Show active profile
 claude --status            # Show global, local, and active profiles
 ```
+
+### Creating Custom Profiles
+
+Run `claude --new-profile` to create a new profile interactively. It will prompt for:
+- **Profile name** (e.g., `zai`, `openai`, `local`)
+- **API Base URL** (e.g., `https://api.z.ai/api/anthropic`)
+- **API Key**
+- **Model name** (used for opus/sonnet/haiku defaults)
 
 Profile switching is always per-project - it creates `.claude/settings.local.json` in the current directory. This way your global settings stay clean and each project can have its own profile.
 
