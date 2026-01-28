@@ -26,8 +26,9 @@ __claude_create_profile() {
   echo "╚═══════════════════════════════════════════╝"
   echo
   
-  # Get profile details
-  read -p "Profile name (e.g., zai, openai, local): " PROFILE_NAME
+  # Get profile details (using echo/read for zsh compatibility)
+  echo -n "Profile name (e.g., zai, openai, local): "
+  read PROFILE_NAME
   if [[ -z "$PROFILE_NAME" ]]; then
     echo "❌ Profile name is required"
     return 1
@@ -43,26 +44,30 @@ __claude_create_profile() {
   
   local profile_file="$HOME/.claude/profiles/${PROFILE_NAME}.json"
   if [[ -f "$profile_file" ]]; then
-    read -p "Profile '$PROFILE_NAME' exists. Overwrite? [y/N]: " OVERWRITE
+    echo -n "Profile '$PROFILE_NAME' exists. Overwrite? [y/N]: "
+    read OVERWRITE
     if [[ "$OVERWRITE" != "y" && "$OVERWRITE" != "Y" ]]; then
       echo "Cancelled."
       return 0
     fi
   fi
   
-  read -p "API Base URL (e.g., https://api.z.ai/api/anthropic): " API_URL
+  echo -n "API Base URL (e.g., https://api.z.ai/api/anthropic): "
+  read API_URL
   if [[ -z "$API_URL" ]]; then
     echo "❌ API URL is required"
     return 1
   fi
   
-  read -p "API Key: " API_KEY
+  echo -n "API Key: "
+  read API_KEY
   if [[ -z "$API_KEY" ]]; then
     echo "❌ API Key is required"
     return 1
   fi
   
-  read -p "Model name (used for opus/sonnet/haiku, e.g., glm-4.7): " MODEL_NAME
+  echo -n "Model name (used for opus/sonnet/haiku, e.g., glm-4.7): "
+  read MODEL_NAME
   if [[ -z "$MODEL_NAME" ]]; then
     echo "❌ Model name is required"
     return 1
