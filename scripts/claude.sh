@@ -32,6 +32,8 @@ __claude_detect_profile() {
     url=$(jq -r '.env.ANTHROPIC_BASE_URL' "$settings_file")
     if [[ "$url" == *"z.ai"* ]]; then
       echo "zai"
+    elif [[ "$url" == *"127.0.0.1:8080"* ]]; then
+      echo "cerebras"
     else
       echo "custom"
     fi
@@ -99,17 +101,21 @@ __claude_show_status() {
   local global_profile local_profile active
   global_profile=$(__claude_detect_profile "$HOME/.claude/settings.json")
   local_profile="(none)"
-  local local_settings=".claude/settings.local.json"
-  
-  if [[ -f "$local_settings" ]]; then
-    local_profile=$(__claude_detect_profile "$local_settings")
+
+  # Check .claude/profile file first (matches how claude() detects profile)
+  local profile_from_file
+  profile_from_file=$(__claude_get_local_profile)
+  if [[ -n "$profile_from_file" ]]; then
+    local_profile="$profile_from_file"
+  elif [[ -f ".claude/settings.local.json" ]]; then
+    local_profile=$(__claude_detect_profile ".claude/settings.local.json")
   fi
-  
+
   active="$global_profile"
   if [[ "$local_profile" != "(none)" ]]; then
     active="$local_profile (local)"
   fi
-  
+
   echo "Global profile: $global_profile"
   echo "Local profile:  $local_profile"
   echo "Active:         $active"
