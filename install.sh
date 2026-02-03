@@ -21,9 +21,10 @@ fi
 # Check for claude
 if ! command -v claude &> /dev/null; then
   # Check common locations
-  if [[ ! -x "$HOME/.local/bin/claude" ]] && [[ ! -x "$HOME/.local/bin/claude-bin" ]]; then
+  if [[ ! -x "$HOME/.local/bin/claude" ]] && [[ ! -x "$HOME/.local/bin/claude-bin" ]] && [[ ! -x "/opt/homebrew/bin/claude" ]]; then
     echo "❌ Claude Code not found. Please install it first:"
     echo "   npm install -g @anthropic-ai/claude-code"
+    echo "   or: brew install claude-code"
     exit 1
   fi
 fi
@@ -79,9 +80,18 @@ SHELL_NAME=$(basename "$SHELL")
 case "$SHELL_NAME" in
   zsh)
     RC_FILE="$HOME/.zshrc"
+    SOURCE_LINE="source ${SCRIPT_DIR}/scripts/claude.sh"
+    GREP_PATTERN="claude.sh"
     ;;
   bash)
     RC_FILE="$HOME/.bashrc"
+    SOURCE_LINE="source ${SCRIPT_DIR}/scripts/claude.sh"
+    GREP_PATTERN="claude.sh"
+    ;;
+  fish)
+    RC_FILE="$HOME/.config/fish/config.fish"
+    SOURCE_LINE="source ${SCRIPT_DIR}/scripts/claude.fish"
+    GREP_PATTERN="claude.fish"
     ;;
   *)
     RC_FILE=""
@@ -89,10 +99,10 @@ case "$SHELL_NAME" in
 esac
 
 # Add source line to shell rc if not already present
-SOURCE_LINE="source ${SCRIPT_DIR}/scripts/claude.sh"
-
 if [[ -n "$RC_FILE" ]]; then
-  if grep -qF "claude.sh" "$RC_FILE" 2>/dev/null; then
+  # Ensure directory exists for fish
+  mkdir -p "$(dirname "$RC_FILE")"
+  if grep -qF "$GREP_PATTERN" "$RC_FILE" 2>/dev/null; then
     echo "✓ Shell function already sourced in $RC_FILE"
   else
     echo "" >> "$RC_FILE"
